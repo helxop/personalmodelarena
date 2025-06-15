@@ -8,6 +8,7 @@
 </head>
 <body>
     <datalist id="model-names-list"></datalist>
+    <datalist id="category-names-list"></datalist> <!-- New Datalist -->
     <input type="file" id="file-input" accept=".json,application/json" style="display:none;">
 
     <div id="loader" class="loader-overlay">
@@ -34,6 +35,15 @@
     <main>
         <section id="leaderboard-section">
             <h2>🏆 Leaderboard</h2>
+            <!-- New Filter Controls Section -->
+            <div class="filter-controls">
+                <div class="form-group">
+                    <label for="category-filter">Filter by Category</label>
+                    <select id="category-filter">
+                        <option value="all">All Categories</option>
+                    </select>
+                </div>
+            </div>
             <div class="leaderboard-controls">
                 <button class="sort-btn" data-key="rating">Rating <span></span></button>
                 <button class="sort-btn" data-key="wins">Wins <span></span></button>

@@ -74,6 +74,7 @@ main { padding: 20px; display: grid; grid-template-columns: 1fr; gap: 30px; }
 @media (min-width: 1200px) { main { grid-template-columns: 450px 1fr; } }
 
 #leaderboard-section h2 { margin-top: 0; border-bottom: 2px solid var(--primary-color); padding-bottom: 10px; }
+.filter-controls { margin-bottom: 15px; }
 .leaderboard-controls { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 15px; }
 .sort-btn { background-color: var(--card-bg); color: var(--text-muted); border: 1px solid var(--border-color); }
 .sort-btn.active { background-color: var(--primary-color); color: white; border-color: var(--primary-color); }
@@ -101,9 +102,7 @@ input, textarea, select { width: 100%; padding: 10px; background-color: var(--bg
 textarea { resize: vertical; min-height: 60px; }
 
 /* New Entry Flash Animation */
-.flash {
-    animation: flash-animation 1s ease-out;
-}
+.flash { animation: flash-animation 1s ease-out; }
 @keyframes flash-animation {
     0% { background-color: var(--primary-color); }
     100% { background-color: var(--card-bg); }
