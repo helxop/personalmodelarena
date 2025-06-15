@@ -7,7 +7,7 @@ let jsonData = [];
 let currentSortKey = 'rating';
 let sortDirection = 'desc';
 let currentRankingSystem = 'bt';
-let currentCategory = 'all'; // New state for category filter
+let currentCategory = 'all'; 
 let isDataDirty = false;
 
 // --- DOM ELEMENT REFERENCES ---
@@ -42,7 +42,6 @@ function getModelsAndStats(battles) {
     return { stats, modelNames: new Set(models.values()), categories };
 }
 
-// ... (No changes to calculateBradleyTerryRatings and calculateEloRatings)
 function calculateBradleyTerryRatings(initialStats, battles) {
     const stats = JSON.parse(JSON.stringify(initialStats));
     const models = Object.keys(stats);
@@ -107,7 +106,7 @@ function calculateEloRatings(initialStats, battles) {
 
 // --- UI RENDERING & DOM MANIPULATION ---
 function renderLeaderboard(stats) {
-    const statsArray = Object.values(stats).map(s => ({...s, winrate: s.matches > 0 ? (s.wins / s.matches) : 0 }));
+    const statsArray = Object.values(stats).map(s => ({...s, winrate: s.matches > 0 ? s.wins / s.matches : 0 }));
     const direction = sortDirection === 'asc' ? 1 : -1;
     statsArray.sort((a, b) => {
         const valA = a[currentSortKey];
@@ -120,26 +119,32 @@ function renderLeaderboard(stats) {
     
     leaderboardContainer.innerHTML = statsArray.length === 0 
         ? '<li>No battles in this category.</li>'
-        : statsArray.map((model, index) => `
-            <li>
-                <span class="rank rank-${index + 1}">${index + 1}</span>
-                <div class="model-details">
-                    <div class="model-name">${model.name}</div>
-                    <div class="stats-row">
-                        <span class="rating"><strong>${model.rating}</strong></span>
-                        <span>${model.wins}W / ${model.losses}L / ${model.ties}T</span>
-                        <span>${(model.winrate * 100).toFixed(1)}%</span>
-                        <span>${model.matches} matches</span>
+        : statsArray.map((model, index) => {
+            const rank = index + 1;
+            const rankClass = rank <= 3 ? `rank-${rank}` : '';
+            return `
+                <li>
+                    <span class="rank ${rankClass}">${rank}</span>
+                    <div class="model-details">
+                        <div class="model-name">${model.name}</div>
+                        <div class="stats-row">
+                            <span class="rating"><strong>${model.rating}</strong></span>
+                            <span>${model.wins}W / ${model.losses}L / ${model.ties}T</span>
+                            <span>${(model.winrate * 100).toFixed(1)}%</span>
+                            <span>${model.matches} matches</span>
+                        </div>
                     </div>
-                </div>
-            </li>`).join('');
+                </li>`;
+        }).join('');
     updateSortButtons();
 }
 
 function renderEditor(models, battlesToRender) {
     updateDatalists(models);
-    if (battlesToRender.length === 0) {
-        editorContainer.innerHTML = `<div class="empty-state"><p>No battles to display for this category.</p></div>`;
+    if (battlesToRender.length === 0 && currentCategory !== 'all') {
+        editorContainer.innerHTML = `<div class="empty-state"><p>No battles to display for this category. <br>Switch to "All Categories" to see all entries.</p></div>`;
+    } else if (jsonData.length === 0) {
+        editorContainer.innerHTML = `<div class="empty-state"><p>No battles yet. Click "+ Add Entry" or "Load File".</p></div>`;
     } else {
         editorContainer.innerHTML = [...battlesToRender].reverse().map((entry) => {
             const originalIndex = jsonData.findIndex(item => item === entry);
@@ -194,7 +199,8 @@ function updateDatalists(models) {
 function updateCategoryFilter(categories) {
     const currentVal = categoryFilter.value;
     categoryFilter.innerHTML = '<option value="all">All Categories</option>';
-    categories.forEach(cat => {
+    // Sort categories alphabetically for user convenience
+    Array.from(categories).sort((a,b) => a.localeCompare(b)).forEach(cat => {
         const option = document.createElement('option');
         option.value = cat;
         option.textContent = cat;
@@ -216,22 +222,24 @@ function showLoader(show) {
 function processDataAndRender() {
     showLoader(true);
     setTimeout(() => {
-        const battlesToProcess = currentCategory === 'all' 
+        const filteredBattles = currentCategory === 'all' 
             ? jsonData 
             : jsonData.filter(b => b.category === currentCategory);
 
-        const { stats: initialStats, modelNames, categories } = getModelsAndStats(battlesToProcess);
+        const { stats: allStats, modelNames, categories } = getModelsAndStats(jsonData);
         updateCategoryFilter(categories);
 
         const calculationFn = currentRankingSystem === 'bt' ? calculateBradleyTerryRatings : calculateEloRatings;
-        const finalStats = calculationFn(initialStats, battlesToProcess);
+        const statsForFilteredBattles = getModelsAndStats(filteredBattles).stats;
+        
+        const finalStats = calculationFn(statsForFilteredBattles, filteredBattles);
         
         const titleText = currentCategory === 'all' ? 'All Battles' : `Category: ${currentCategory}`;
         leaderboardTitle.textContent = `🏆 Leaderboard (${titleText})`;
         editorTitle.textContent = `Battle Editor (${titleText})`;
 
         renderLeaderboard(finalStats);
-        renderEditor(modelNames, battlesToProcess);
+        renderEditor(modelNames, filteredBattles);
         saveStateToLocalStorage();
         setDirtyState(false);
         showLoader(false);
@@ -268,9 +276,20 @@ function updateData(index, key, value) {
 }
 
 function addEntry() {
-    jsonData.push({ task: "", input: "text", category: "", match: { model_a: "", model_b: "" }, winner: "" });
+    // **MODIFIED**: New entry now gets the current category pre-filled
+    jsonData.push({ 
+        task: "", 
+        input: "text", 
+        category: currentCategory === 'all' ? "" : currentCategory,
+        match: { model_a: "", model_b: "" }, 
+        winner: "" 
+    });
     setDirtyState(true);
-    processDataAndRender();
+    // Only re-render the editor to avoid a full recalculation, making the UI feel faster
+    const { modelNames } = getModelsAndStats(jsonData);
+    const filteredBattles = currentCategory === 'all' ? jsonData : jsonData.filter(b => b.category === currentCategory);
+    renderEditor(modelNames, filteredBattles);
+    
     const newCard = editorContainer.querySelector('.card');
     if(newCard) {
         newCard.scrollIntoView({ behavior: 'smooth' });
@@ -343,6 +362,9 @@ function handleFileLoad(event) {
         try {
             jsonData = JSON.parse(e.target.result);
             if (!Array.isArray(jsonData)) throw new Error('JSON data must be an array.');
+            // Reset category to 'all' when a new file is loaded for a clean state
+            currentCategory = 'all';
+            categoryFilter.value = 'all';
             processDataAndRender();
         } catch (error) {
             alert('Error parsing JSON file: ' + error.message);
@@ -394,7 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
-
+    
     categoryFilter.addEventListener('change', (e) => {
         currentCategory = e.target.value;
         processDataAndRender();
