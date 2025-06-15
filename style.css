@@ -97,7 +97,7 @@ main { padding: 20px; display: grid; grid-template-columns: 1fr; gap: 30px; }
 .form-group { margin-bottom: 15px; }
 .form-group-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 .form-group label { display: block; margin-bottom: 5px; font-weight: bold; color: var(--text-muted); }
-input[type="text"], textarea { width: 100%; padding: 10px; background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 5px; font-family: inherit; }
+input, textarea, select { width: 100%; padding: 10px; background-color: var(--bg-color); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 5px; font-family: inherit; }
 textarea { resize: vertical; min-height: 60px; }
 
 /* New Entry Flash Animation */

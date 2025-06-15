@@ -33,7 +33,6 @@ function getModelsAndStats(battles) {
     models.forEach((originalCase, lowerCase) => {
         stats[lowerCase] = { name: originalCase, rating: DEFAULT_RATING, wins: 0, losses: 0, ties: 0, matches: 0 };
     });
-    // Return both the stats object and a Set of original-cased names for the datalist
     return { stats, modelNames: new Set(models.values()) };
 }
 
@@ -132,19 +131,23 @@ function renderLeaderboard(stats) {
     
     leaderboardContainer.innerHTML = statsArray.length === 0 
         ? '<li>No battle data loaded.</li>'
-        : statsArray.map((model, index) => `
-            <li>
-                <span class="rank rank-${index + 1}">${index + 1}</span>
-                <div class="model-details">
-                    <div class="model-name">${model.name}</div>
-                    <div class="stats-row">
-                        <span class="rating"><strong>${model.rating}</strong></span>
-                        <span>${model.wins}W / ${model.losses}L / ${model.ties}T</span>
-                        <span>${(model.winrate * 100).toFixed(1)}%</span>
-                        <span>${model.matches} matches</span>
+        : statsArray.map((model, index) => {
+            const rank = index + 1;
+            const rankClass = rank <= 3 ? `rank-${rank}` : '';
+            return `
+                <li>
+                    <span class="rank ${rankClass}">${rank}</span>
+                    <div class="model-details">
+                        <div class="model-name">${model.name}</div>
+                        <div class="stats-row">
+                            <span class="rating"><strong>${model.rating}</strong></span>
+                            <span>${model.wins}W / ${model.losses}L / ${model.ties}T</span>
+                            <span>${(model.winrate * 100).toFixed(1)}%</span>
+                            <span>${model.matches} matches</span>
+                        </div>
                     </div>
-                </div>
-            </li>`).join('');
+                </li>`;
+        }).join('');
     updateSortButtons();
 }
 
@@ -155,11 +158,13 @@ function renderEditor(models) {
     } else {
         editorContainer.innerHTML = [...jsonData].reverse().map((entry, reverseIndex) => {
             const originalIndex = jsonData.length - 1 - reverseIndex;
+            // **MODIFIED**: Handle old string-based input and new object-based input
+            const inputType = typeof entry.input === 'string' ? entry.input : entry.input?.type || 'text';
             return `
             <div class="card" data-index="${originalIndex}">
                 <div class="card-header">
                     <h3>Entry #${originalIndex + 1}</h3>
-                    <button class="btn btn-danger delete-btn">Delete</button>
+                    <button class="delete-btn btn btn-danger">Delete</button>
                 </div>
                 <div class="card-body">
                     <div class="form-group"><label>Task</label><textarea data-key="task">${entry.task || ''}</textarea></div>
@@ -167,7 +172,19 @@ function renderEditor(models) {
                         <div class="form-group"><label>Model A</label><input type="text" list="model-names-list" value="${entry.match?.model_a || ''}" data-key="match.model_a"></div>
                         <div class="form-group"><label>Model B</label><input type="text" list="model-names-list" value="${entry.match?.model_b || ''}" data-key="match.model_b"></div>
                     </div>
-                    <div class="form-group"><label>Winner (or "tie")</label><input type="text" list="model-names-list" value="${entry.winner || ''}" data-key="winner"></div>
+                    <div class="form-group-grid">
+                        <div class="form-group">
+                            <label>Input Type</label>
+                            <select data-key="input.type">
+                                <option value="text" ${inputType === 'text' ? 'selected' : ''}>Text</option>
+                                <option value="image" ${inputType === 'image' ? 'selected' : ''}>Image</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Winner (or "tie")</label>
+                            <input type="text" list="model-names-list" value="${entry.winner || ''}" data-key="winner">
+                        </div>
+                    </div>
                 </div>
             </div>`;
         }).join('');
@@ -203,7 +220,6 @@ function showLoader(show) {
 // --- DATA & EVENT HANDLERS ---
 function processDataAndRender() {
     showLoader(true);
-    // Use a short timeout to allow the UI to update with the loader before the heavy computation starts
     setTimeout(() => {
         const { stats: initialStats, modelNames } = getModelsAndStats(jsonData);
         const calculationFn = currentRankingSystem === 'bt' ? calculateBradleyTerryRatings : calculateEloRatings;
@@ -237,19 +253,20 @@ function setSortOrder(key) {
 function updateData(index, key, value) {
     const keys = key.split('.');
     let obj = jsonData[index];
-    keys.forEach((k, i) => {
-        if (i === keys.length - 1) obj[k] = value;
-        else {
-            if (!obj[k]) obj[k] = {};
-            obj = obj[k];
+    // **MODIFIED**: Ensure nested objects exist before assignment
+    for (let i = 0; i < keys.length - 1; i++) {
+        if (!obj[keys[i]] || typeof obj[keys[i]] !== 'object') {
+            obj[keys[i]] = {};
         }
-    });
+        obj = obj[keys[i]];
+    }
+    obj[keys[keys.length - 1]] = value;
     setDirtyState(true);
 }
 
 function addEntry() {
-    jsonData.push({ task: "", match: { model_a: "", model_b: "" }, winner: "" });
-    // Just re-render the editor part, not the whole expensive calculation
+    // **MODIFIED**: New entries use the object structure for input
+    jsonData.push({ task: "", input: { type: "text" }, match: { model_a: "", model_b: "" }, winner: "" });
     const { modelNames } = getModelsAndStats(jsonData);
     renderEditor(modelNames);
     const newCard = editorContainer.querySelector('.card');
@@ -264,7 +281,6 @@ function addEntry() {
 function deleteEntry(index) {
     if (confirm(`Are you sure you want to delete Entry #${index + 1}?`)) {
         jsonData.splice(index, 1);
-        setDirtyState(true);
         processDataAndRender();
     }
 }
@@ -291,6 +307,7 @@ function loadStateFromLocalStorage() {
     }
 }
 
+// --- MODAL & EXPORT FUNCTIONS ---
 function showExportModal() {
     jsonOutput.value = JSON.stringify(jsonData, null, 2);
     exportModal.style.display = "block";
@@ -349,15 +366,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('clear-all-btn').addEventListener('click', clearAllData);
     
     document.getElementById('ranking-selector').addEventListener('click', (e) => {
-        if (e.target.tagName === 'BUTTON') setRankingSystem(e.target.dataset.system);
+        if (e.target.matches('button[data-system]')) setRankingSystem(e.target.dataset.system);
     });
 
     document.querySelector('.leaderboard-controls').addEventListener('click', (e) => {
-        if (e.target.closest('.sort-btn')) setSortOrder(e.target.closest('.sort-btn').dataset.key);
+        const sortBtn = e.target.closest('.sort-btn');
+        if (sortBtn) setSortOrder(sortBtn.dataset.key);
     });
 
+    // Combined listener for inputs and selects
     editorContainer.addEventListener('input', (e) => {
-        if (e.target.matches('input, textarea')) {
+        if (e.target.matches('input, textarea, select')) {
             const card = e.target.closest('.card');
             if (card) {
                 const index = parseInt(card.dataset.index, 10);
