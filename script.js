@@ -7,6 +7,7 @@ let jsonData = [];
 let currentSortKey = 'rating';
 let sortDirection = 'desc';
 let currentRankingSystem = 'bt';
+let isDataDirty = false;
 
 // --- DOM ELEMENT REFERENCES ---
 const editorContainer = document.getElementById('editor-container');
@@ -15,26 +16,29 @@ const fileInput = document.getElementById('file-input');
 const exportModal = document.getElementById('export-modal');
 const jsonOutput = document.getElementById('json-output');
 const modelDatalist = document.getElementById('model-names-list');
+const loader = document.getElementById('loader');
+const calculateBtn = document.getElementById('calculate-btn');
 
 // --- CORE RATING LOGIC ---
 
-function getInitialStats(battles) {
+function getModelsAndStats(battles) {
     const stats = {};
-    const models = new Map(); 
+    const models = new Map();
     battles.forEach(b => {
         const modelA = b.match?.model_a?.trim();
         const modelB = b.match?.model_b?.trim();
-        if(modelA && !models.has(modelA.toLowerCase())) models.set(modelA.toLowerCase(), modelA);
-        if(modelB && !models.has(modelB.toLowerCase())) models.set(modelB.toLowerCase(), modelB);
+        if (modelA && !models.has(modelA.toLowerCase())) models.set(modelA.toLowerCase(), modelA);
+        if (modelB && !models.has(modelB.toLowerCase())) models.set(modelB.toLowerCase(), modelB);
     });
     models.forEach((originalCase, lowerCase) => {
         stats[lowerCase] = { name: originalCase, rating: DEFAULT_RATING, wins: 0, losses: 0, ties: 0, matches: 0 };
     });
-    return stats;
+    // Return both the stats object and a Set of original-cased names for the datalist
+    return { stats, modelNames: new Set(models.values()) };
 }
 
 function calculateBradleyTerryRatings(initialStats, battles) {
-    const stats = JSON.parse(JSON.stringify(initialStats)); 
+    const stats = JSON.parse(JSON.stringify(initialStats));
     const models = Object.keys(stats);
     if (models.length === 0) return {};
 
@@ -95,7 +99,6 @@ function calculateEloRatings(initialStats, battles) {
 
         const ratingA = stats[model_a].rating;
         const ratingB = stats[model_b].rating;
-
         const expectedA = 1 / (1 + Math.pow(10, (ratingB - ratingA) / 400));
         const expectedB = 1 - expectedA;
 
@@ -117,63 +120,54 @@ function renderLeaderboard(stats) {
     const statsArray = Object.values(stats).map(s => ({...s, winrate: s.matches > 0 ? s.wins / s.matches : 0 }));
     const direction = sortDirection === 'asc' ? 1 : -1;
     statsArray.sort((a, b) => {
-        if (a[currentSortKey] < b[currentSortKey]) return -1 * direction;
-        if (a[currentSortKey] > b[currentSortKey]) return 1 * direction;
+        const valA = a[currentSortKey];
+        const valB = b[currentSortKey];
+        if (typeof valA === 'string') {
+            return valA.localeCompare(valB) * direction;
+        }
+        if (valA < valB) return -1 * direction;
+        if (valA > valB) return 1 * direction;
         return 0;
     });
     
-    if (statsArray.length === 0) {
-        leaderboardContainer.innerHTML = '<li>No battle data loaded.</li>';
-    } else {
-        leaderboardContainer.innerHTML = statsArray.map((model, index) => {
-            const rank = index + 1;
-            const rankClass = rank <= 3 ? `rank-${rank}` : '';
-            return `
-                <li>
-                    <span class="rank ${rankClass}">${rank}</span>
-                    <div class="model-details">
-                        <div class="model-name">${model.name}</div>
-                        <div class="stats-row">
-                            <span class="rating"><strong>${model.rating}</strong></span>
-                            <span>${model.wins}W / ${model.losses}L / ${model.ties}T</span>
-                            <span>${(model.winrate * 100).toFixed(1)}%</span>
-                            <span>${model.matches} matches</span>
-                        </div>
+    leaderboardContainer.innerHTML = statsArray.length === 0 
+        ? '<li>No battle data loaded.</li>'
+        : statsArray.map((model, index) => `
+            <li>
+                <span class="rank rank-${index + 1}">${index + 1}</span>
+                <div class="model-details">
+                    <div class="model-name">${model.name}</div>
+                    <div class="stats-row">
+                        <span class="rating"><strong>${model.rating}</strong></span>
+                        <span>${model.wins}W / ${model.losses}L / ${model.ties}T</span>
+                        <span>${(model.winrate * 100).toFixed(1)}%</span>
+                        <span>${model.matches} matches</span>
                     </div>
-                </li>`;
-        }).join('');
-    }
+                </div>
+            </li>`).join('');
     updateSortButtons();
 }
 
-function renderEditor() {
-    const models = new Set();
-    jsonData.forEach(entry => {
-        const modelA = entry.match?.model_a?.trim();
-        const modelB = entry.match?.model_b?.trim();
-        if (modelA) models.add(modelA);
-        if (modelB) models.add(modelB);
-    });
+function renderEditor(models) {
     updateDatalists(models);
-
     if (jsonData.length === 0) {
         editorContainer.innerHTML = `<div class="empty-state"><p>No battles yet. Click "+ Add Entry" or "Load File".</p></div>`;
     } else {
         editorContainer.innerHTML = [...jsonData].reverse().map((entry, reverseIndex) => {
             const originalIndex = jsonData.length - 1 - reverseIndex;
             return `
-            <div class="card">
+            <div class="card" data-index="${originalIndex}">
                 <div class="card-header">
                     <h3>Entry #${originalIndex + 1}</h3>
-                    <button class="btn btn-danger" onclick="deleteEntry(${originalIndex})">Delete</button>
+                    <button class="btn btn-danger delete-btn">Delete</button>
                 </div>
                 <div class="card-body">
-                    <div class="form-group"><label>Task</label><textarea oninput="updateData(${originalIndex}, 'task', this.value)">${entry.task || ''}</textarea></div>
+                    <div class="form-group"><label>Task</label><textarea data-key="task">${entry.task || ''}</textarea></div>
                     <div class="form-group-grid">
-                        <div class="form-group"><label>Model A</label><input type="text" list="model-names-list" value="${entry.match?.model_a || ''}" oninput="updateData(${originalIndex}, 'match.model_a', this.value)"></div>
-                        <div class="form-group"><label>Model B</label><input type="text" list="model-names-list" value="${entry.match?.model_b || ''}" oninput="updateData(${originalIndex}, 'match.model_b', this.value)"></div>
+                        <div class="form-group"><label>Model A</label><input type="text" list="model-names-list" value="${entry.match?.model_a || ''}" data-key="match.model_a"></div>
+                        <div class="form-group"><label>Model B</label><input type="text" list="model-names-list" value="${entry.match?.model_b || ''}" data-key="match.model_b"></div>
                     </div>
-                     <div class="form-group"><label>Winner (or "tie")</label><input type="text" list="model-names-list" value="${entry.winner || ''}" oninput="updateData(${originalIndex}, 'winner', this.value)"></div>
+                    <div class="form-group"><label>Winner (or "tie")</label><input type="text" list="model-names-list" value="${entry.winner || ''}" data-key="winner"></div>
                 </div>
             </div>`;
         }).join('');
@@ -182,10 +176,9 @@ function renderEditor() {
 
 function updateSortButtons() {
     document.querySelectorAll('.sort-btn').forEach(btn => {
-        const key = btn.onclick.toString().match(/'([^']+)'/)[1];
         btn.classList.remove('active');
         const arrowSpan = btn.querySelector('span');
-        if (key === currentSortKey) {
+        if (btn.dataset.key === currentSortKey) {
             btn.classList.add('active');
             arrowSpan.textContent = sortDirection === 'desc' ? '▼' : '▲';
         } else {
@@ -198,20 +191,36 @@ function updateDatalists(models) {
     modelDatalist.innerHTML = Array.from(models).map(m => `<option value="${m}"></option>`).join('');
 }
 
-// --- DATA MANIPULATION & EVENT HANDLERS ---
+function setDirtyState(isDirty) {
+    isDataDirty = isDirty;
+    calculateBtn.classList.toggle('dirty-state', isDirty);
+}
+
+function showLoader(show) {
+    loader.style.display = show ? 'flex' : 'none';
+}
+
+// --- DATA & EVENT HANDLERS ---
 function processDataAndRender() {
-    const initialStats = getInitialStats(jsonData);
-    const calculationFn = currentRankingSystem === 'bt' ? calculateBradleyTerryRatings : calculateEloRatings;
-    const finalStats = calculationFn(initialStats, jsonData);
-    renderLeaderboard(finalStats);
-    renderEditor();
-    saveStateToLocalStorage();
+    showLoader(true);
+    // Use a short timeout to allow the UI to update with the loader before the heavy computation starts
+    setTimeout(() => {
+        const { stats: initialStats, modelNames } = getModelsAndStats(jsonData);
+        const calculationFn = currentRankingSystem === 'bt' ? calculateBradleyTerryRatings : calculateEloRatings;
+        const finalStats = calculationFn(initialStats, jsonData);
+        renderLeaderboard(finalStats);
+        renderEditor(modelNames);
+        saveStateToLocalStorage();
+        setDirtyState(false);
+        showLoader(false);
+    }, 50);
 }
 
 function setRankingSystem(system) {
     currentRankingSystem = system;
-    document.getElementById('select-bt').classList.toggle('active', system === 'bt');
-    document.getElementById('select-elo').classList.toggle('active', system === 'elo');
+    document.querySelectorAll('#ranking-selector .btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.system === system);
+    });
     processDataAndRender();
 }
 
@@ -235,18 +244,34 @@ function updateData(index, key, value) {
             obj = obj[k];
         }
     });
+    setDirtyState(true);
 }
 
 function addEntry() {
     jsonData.push({ task: "", match: { model_a: "", model_b: "" }, winner: "" });
-    renderEditor();
+    // Just re-render the editor part, not the whole expensive calculation
+    const { modelNames } = getModelsAndStats(jsonData);
+    renderEditor(modelNames);
     const newCard = editorContainer.querySelector('.card');
-    if(newCard) newCard.scrollIntoView({ behavior: 'smooth' });
+    if(newCard) {
+        newCard.scrollIntoView({ behavior: 'smooth' });
+        newCard.classList.add('flash');
+        setTimeout(() => newCard.classList.remove('flash'), 1000);
+    }
+    setDirtyState(true);
 }
 
 function deleteEntry(index) {
     if (confirm(`Are you sure you want to delete Entry #${index + 1}?`)) {
         jsonData.splice(index, 1);
+        setDirtyState(true);
+        processDataAndRender();
+    }
+}
+
+function clearAllData() {
+    if (confirm("Are you sure you want to delete ALL battle data? This cannot be undone.")) {
+        jsonData = [];
         processDataAndRender();
     }
 }
@@ -266,12 +291,11 @@ function loadStateFromLocalStorage() {
     }
 }
 
-// --- MODAL & EXPORT FUNCTIONS ---
 function showExportModal() {
     jsonOutput.value = JSON.stringify(jsonData, null, 2);
     exportModal.style.display = "block";
 }
-function closeExportModal() { exportModal.style.display = "none"; }
+
 function copyJsonToClipboard(button) {
     navigator.clipboard.writeText(jsonOutput.value).then(() => {
         const originalText = button.textContent;
@@ -279,6 +303,7 @@ function copyJsonToClipboard(button) {
         setTimeout(() => { button.textContent = originalText; }, 2000);
     }).catch(err => alert('Failed to copy JSON: ' + err));
 }
+
 function exportToFile() {
     const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -294,6 +319,7 @@ function exportToFile() {
 function handleFileLoad(event) {
     const file = event.target.files[0];
     if (!file) return;
+    showLoader(true);
     const reader = new FileReader();
     reader.onload = function(e) {
         try {
@@ -302,6 +328,7 @@ function handleFileLoad(event) {
             processDataAndRender();
         } catch (error) {
             alert('Error parsing JSON file: ' + error.message);
+            showLoader(false);
         } finally {
             fileInput.value = '';
         }
@@ -309,10 +336,52 @@ function handleFileLoad(event) {
     reader.readAsText(file);
 }
 
-// --- INITIALIZATION ---
-fileInput.addEventListener('change', handleFileLoad);
-window.onclick = function(event) { if (event.target == exportModal) closeExportModal(); }
+// --- INITIALIZATION & EVENT LISTENERS ---
 document.addEventListener('DOMContentLoaded', () => {
     loadStateFromLocalStorage();
     processDataAndRender();
+
+    // Attach event listeners
+    document.getElementById('load-file-btn').addEventListener('click', () => fileInput.click());
+    document.getElementById('add-entry-btn').addEventListener('click', addEntry);
+    calculateBtn.addEventListener('click', processDataAndRender);
+    document.getElementById('export-btn').addEventListener('click', showExportModal);
+    document.getElementById('clear-all-btn').addEventListener('click', clearAllData);
+    
+    document.getElementById('ranking-selector').addEventListener('click', (e) => {
+        if (e.target.tagName === 'BUTTON') setRankingSystem(e.target.dataset.system);
+    });
+
+    document.querySelector('.leaderboard-controls').addEventListener('click', (e) => {
+        if (e.target.closest('.sort-btn')) setSortOrder(e.target.closest('.sort-btn').dataset.key);
+    });
+
+    editorContainer.addEventListener('input', (e) => {
+        if (e.target.matches('input, textarea')) {
+            const card = e.target.closest('.card');
+            if (card) {
+                const index = parseInt(card.dataset.index, 10);
+                const key = e.target.dataset.key;
+                updateData(index, key, e.target.value);
+            }
+        }
+    });
+
+    editorContainer.addEventListener('click', (e) => {
+        if (e.target.classList.contains('delete-btn')) {
+            const card = e.target.closest('.card');
+            if (card) {
+                const index = parseInt(card.dataset.index, 10);
+                deleteEntry(index);
+            }
+        }
+    });
+
+    // Modal listeners
+    document.getElementById('download-file-btn').addEventListener('click', exportToFile);
+    document.getElementById('copy-json-btn').addEventListener('click', (e) => copyJsonToClipboard(e.target));
+    document.getElementById('close-modal-btn').addEventListener('click', () => exportModal.style.display = 'none');
+    window.addEventListener('click', (e) => { if (e.target === exportModal) exportModal.style.display = 'none'; });
+
+    fileInput.addEventListener('change', handleFileLoad);
 });
