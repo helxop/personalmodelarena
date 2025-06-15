@@ -1,11 +1,3 @@
-Of course. With the major addition of category filtering, the documentation needs a significant update to explain the new, powerful features.
-
-Here is a comprehensive `README.md` for the latest version of your "LLM Battle Arena & Ranking" application.
-
----
-
-# LLM Battle Arena & Ranking
-
 An advanced, browser-based tool for evaluating and ranking Large Language Models (LLMs) through pairwise comparisons. This application allows users to load, edit, and analyze battle data using two distinct statistical models: the classic **ELO system** and the holistic **Bradley-Terry model**.
 
 A key feature of this tool is the ability to **filter battles by category**, allowing for specialized leaderboards that reveal model strengths and weaknesses in specific domains like `summarization`, `html_dev`, or `creative_writing`.
