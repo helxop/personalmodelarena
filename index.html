@@ -10,19 +10,24 @@
     <datalist id="model-names-list"></datalist>
     <input type="file" id="file-input" accept=".json,application/json" style="display:none;">
 
+    <div id="loader" class="loader-overlay">
+        <div class="loader"></div>
+    </div>
+
     <header class="header">
         <div class="header-top">
             <h1>LLM Battle Arena</h1>
-            <div class="ranking-selector segmented-control">
-                <button id="select-bt" class="btn active" onclick="setRankingSystem('bt')">Bradley-Terry</button>
-                <button id="select-elo" class="btn" onclick="setRankingSystem('elo')">ELO</button>
+            <div id="ranking-selector" class="ranking-selector segmented-control">
+                <button data-system="bt" class="btn active">Bradley-Terry</button>
+                <button data-system="elo" class="btn">ELO</button>
             </div>
         </div>
         <div class="header-actions">
-            <button class="btn" onclick="document.getElementById('file-input').click()">Load File</button>
-            <button class="btn btn-primary" onclick="addEntry()">+ Add Entry</button>
-            <button class="btn btn-success" onclick="processDataAndRender()">Calculate Ratings</button>
-            <button class="btn" onclick="showExportModal()">View / Export</button>
+            <button class="btn" id="load-file-btn">Load File</button>
+            <button class="btn btn-primary" id="add-entry-btn">+ Add Entry</button>
+            <button class="btn btn-success" id="calculate-btn">Calculate Ratings</button>
+            <button class="btn" id="export-btn">View / Export</button>
+            <button class="btn btn-danger" id="clear-all-btn">Clear All</button>
         </div>
     </header>
 
@@ -30,12 +35,12 @@
         <section id="leaderboard-section">
             <h2>🏆 Leaderboard</h2>
             <div class="leaderboard-controls">
-                <button class="sort-btn" onclick="setSortOrder('rating')">Rating <span></span></button>
-                <button class="sort-btn" onclick="setSortOrder('wins')">Wins <span></span></button>
-                <button class="sort-btn" onclick="setSortOrder('losses')">Losses <span></span></button>
-                <button class="sort-btn" onclick="setSortOrder('ties')">Ties <span></span></button>
-                <button class="sort-btn" onclick="setSortOrder('matches')">Matches <span></span></button>
-                <button class="sort-btn" onclick="setSortOrder('winrate')">Winrate <span></span></button>
+                <button class="sort-btn" data-key="rating">Rating <span></span></button>
+                <button class="sort-btn" data-key="wins">Wins <span></span></button>
+                <button class="sort-btn" data-key="losses">Losses <span></span></button>
+                <button class="sort-btn" data-key="ties">Ties <span></span></button>
+                <button class="sort-btn" data-key="matches">Matches <span></span></button>
+                <button class="sort-btn" data-key="winrate">Winrate <span></span></button>
             </div>
             <ul id="leaderboard-container"></ul>
         </section>
@@ -50,9 +55,9 @@
             <h2>Generated JSON</h2>
             <textarea id="json-output" readonly></textarea>
             <div class="modal-actions">
-                <button class="btn btn-success" onclick="exportToFile()">Download File</button>
-                <button class="btn btn-primary" onclick="copyJsonToClipboard(this)">Copy</button>
-                <button class="btn btn-danger" onclick="closeExportModal()">Close</button>
+                <button class="btn btn-success" id="download-file-btn">Download File</button>
+                <button class="btn btn-primary" id="copy-json-btn">Copy</button>
+                <button class="btn btn-danger" id="close-modal-btn">Close</button>
             </div>
         </div>
     </div>
