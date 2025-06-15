@@ -164,7 +164,7 @@
         let jsonData = [];
         let currentSortKey = 'rating';
         let sortDirection = 'desc';
-        let currentRankingSystem = 'bt'; // 'bt' or 'elo'
+        let currentRankingSystem = 'bt';
 
         // --- DOM ELEMENT REFERENCES ---
         const editorContainer = document.getElementById('editor-container');
@@ -176,21 +176,28 @@
 
         // --- CORE RATING LOGIC ---
 
+        /**
+         * Collects all unique, non-empty, trimmed model names from the battle data.
+         * @param {Array} battles - The array of battle objects.
+         * @returns {Object} A stats object with initialized values for each model.
+         */
         function getInitialStats(battles) {
             const stats = {};
-            const models = new Set();
+            const models = new Map(); // Use a Map to store original casing for display
             battles.forEach(b => {
-                if(b.match?.model_a) models.add(b.match.model_a);
-                if(b.match?.model_b) models.add(b.match.model_b);
+                const modelA = b.match?.model_a?.trim();
+                const modelB = b.match?.model_b?.trim();
+                if(modelA && !models.has(modelA.toLowerCase())) models.set(modelA.toLowerCase(), modelA);
+                if(modelB && !models.has(modelB.toLowerCase())) models.set(modelB.toLowerCase(), modelB);
             });
-            models.forEach(m => {
-                stats[m] = { name: m, rating: DEFAULT_RATING, wins: 0, losses: 0, ties: 0, matches: 0 };
+            models.forEach((originalCase, lowerCase) => {
+                stats[lowerCase] = { name: originalCase, rating: DEFAULT_RATING, wins: 0, losses: 0, ties: 0, matches: 0 };
             });
             return stats;
         }
 
-        function calculateBradleyTerryRatings(battles) {
-            const stats = getInitialStats(battles);
+        function calculateBradleyTerryRatings(initialStats, battles) {
+            const stats = JSON.parse(JSON.stringify(initialStats)); // Deep copy to avoid mutation
             const models = Object.keys(stats);
             if (models.length === 0) return {};
 
@@ -202,8 +209,9 @@
             });
 
             battles.forEach(b => {
-                const { model_a, model_b } = b.match || {};
-                const winner = b.winner?.toLowerCase();
+                const model_a = b.match?.model_a?.trim().toLowerCase();
+                const model_b = b.match?.model_b?.trim().toLowerCase();
+                const winner = b.winner?.trim().toLowerCase();
                 if (!model_a || !model_b || !winner || !stats[model_a] || !stats[model_b]) return;
 
                 if (!matchups[model_a][model_b]) matchups[model_a][model_b] = 0;
@@ -211,8 +219,8 @@
                 matchups[model_a][model_b]++;
                 matchups[model_b][model_a]++;
 
-                if (winner === model_a.toLowerCase()) { stats[model_a].wins++; stats[model_b].losses++; effectiveWins[model_a]++; } 
-                else if (winner === model_b.toLowerCase()) { stats[model_b].wins++; stats[model_a].losses++; effectiveWins[model_b]++; }
+                if (winner === model_a) { stats[model_a].wins++; stats[model_b].losses++; effectiveWins[model_a]++; } 
+                else if (winner === model_b) { stats[model_b].wins++; stats[model_a].losses++; effectiveWins[model_b]++; }
                 else if (winner === 'tie') { stats[model_a].ties++; stats[model_b].ties++; effectiveWins[model_a] += 0.5; effectiveWins[model_b] += 0.5; }
                 stats[model_a].matches++; stats[model_b].matches++;
             });
@@ -239,12 +247,13 @@
             return stats;
         }
 
-        function calculateEloRatings(battles) {
-            const stats = getInitialStats(battles);
+        function calculateEloRatings(initialStats, battles) {
+            const stats = JSON.parse(JSON.stringify(initialStats)); // Deep copy
 
             battles.forEach(b => {
-                const { model_a, model_b } = b.match || {};
-                const winner = b.winner?.toLowerCase();
+                const model_a = b.match?.model_a?.trim().toLowerCase();
+                const model_b = b.match?.model_b?.trim().toLowerCase();
+                const winner = b.winner?.trim().toLowerCase();
                 if (!model_a || !model_b || !winner || !stats[model_a] || !stats[model_b]) return;
 
                 const ratingA = stats[model_a].rating;
@@ -254,8 +263,8 @@
                 const expectedB = 1 - expectedA;
 
                 let actualA, actualB;
-                if (winner === model_a.toLowerCase()) { actualA = 1; actualB = 0; stats[model_a].wins++; stats[model_b].losses++; } 
-                else if (winner === model_b.toLowerCase()) { actualA = 0; actualB = 1; stats[model_b].wins++; stats[model_a].losses++; }
+                if (winner === model_a) { actualA = 1; actualB = 0; stats[model_a].wins++; stats[model_b].losses++; } 
+                else if (winner === model_b) { actualA = 0; actualB = 1; stats[model_b].wins++; stats[model_a].losses++; }
                 else if (winner === 'tie') { actualA = 0.5; actualB = 0.5; stats[model_a].ties++; stats[model_b].ties++; }
                 else { return; }
 
@@ -268,11 +277,12 @@
 
         // --- UI RENDERING & DOM MANIPULATION ---
         function renderLeaderboard(stats) {
-            const statsArray = Object.values(stats).map(s => ({...s, winrate: s.matches > 0 ? s.wins / s.matches : 0 }));
+            const statsArray = Object.values(stats).map(s => ({...s, winrate: s.matches > 0 ? (s.wins / s.matches) : 0 }));
+            const direction = sortDirection === 'asc' ? 1 : -1;
             statsArray.sort((a, b) => {
-                const valA = a[currentSortKey];
-                const valB = b[currentSortKey];
-                return sortDirection === 'asc' ? (valA < valB ? -1 : 1) : (valA > valB ? -1 : 1);
+                if (a[currentSortKey] < b[currentSortKey]) return -1 * direction;
+                if (a[currentSortKey] > b[currentSortKey]) return 1 * direction;
+                return 0;
             });
             
             if (statsArray.length === 0) {
@@ -302,8 +312,10 @@
         function renderEditor() {
             const models = new Set();
             jsonData.forEach(entry => {
-                if (entry.match?.model_a) models.add(entry.match.model_a);
-                if (entry.match?.model_b) models.add(entry.match.model_b);
+                const modelA = entry.match?.model_a?.trim();
+                const modelB = entry.match?.model_b?.trim();
+                if (modelA) models.add(modelA);
+                if (modelB) models.add(modelB);
             });
             updateDatalists(models);
 
@@ -333,6 +345,7 @@
         
         function updateSortButtons() {
             document.querySelectorAll('.sort-btn').forEach(btn => {
+                // Simplified key extraction assuming the first argument in onclick is the key
                 const key = btn.onclick.toString().match(/'([^']+)'/)[1];
                 btn.classList.remove('active');
                 const arrowSpan = btn.querySelector('span');
@@ -351,9 +364,10 @@
 
         // --- DATA MANIPULATION & EVENT HANDLERS ---
         function processDataAndRender() {
+            const initialStats = getInitialStats(jsonData);
             const calculationFn = currentRankingSystem === 'bt' ? calculateBradleyTerryRatings : calculateEloRatings;
-            const stats = calculationFn(jsonData);
-            renderLeaderboard(stats);
+            const finalStats = calculationFn(initialStats, jsonData);
+            renderLeaderboard(finalStats);
             renderEditor();
             saveStateToLocalStorage();
         }
@@ -385,6 +399,7 @@
                     obj = obj[k];
                 }
             });
+            // Intentionally not re-rendering on every keystroke for performance.
         }
 
         function addEntry() {
