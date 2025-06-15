@@ -8,7 +8,6 @@
 </head>
 <body>
     <datalist id="model-names-list"></datalist>
-    <datalist id="category-names-list"></datalist> <!-- New Datalist -->
     <input type="file" id="file-input" accept=".json,application/json" style="display:none;">
 
     <div id="loader" class="loader-overlay">
@@ -18,9 +17,16 @@
     <header class="header">
         <div class="header-top">
             <h1>LLM Battle Arena</h1>
-            <div id="ranking-selector" class="ranking-selector segmented-control">
-                <button data-system="bt" class="btn active">Bradley-Terry</button>
-                <button data-system="elo" class="btn">ELO</button>
+            <div class="header-controls">
+                <div id="ranking-selector" class="ranking-selector segmented-control">
+                    <button data-system="bt" class="btn active">Bradley-Terry</button>
+                    <button data-system="elo" class="btn">ELO</button>
+                </div>
+                <div class="filter-container">
+                    <select id="category-filter" class="btn">
+                        <option value="all">All Categories</option>
+                    </select>
+                </div>
             </div>
         </div>
         <div class="header-actions">
@@ -34,16 +40,7 @@
 
     <main>
         <section id="leaderboard-section">
-            <h2>🏆 Leaderboard</h2>
-            <!-- New Filter Controls Section -->
-            <div class="filter-controls">
-                <div class="form-group">
-                    <label for="category-filter">Filter by Category</label>
-                    <select id="category-filter">
-                        <option value="all">All Categories</option>
-                    </select>
-                </div>
-            </div>
+            <h2 id="leaderboard-title">🏆 Leaderboard (All Battles)</h2>
             <div class="leaderboard-controls">
                 <button class="sort-btn" data-key="rating">Rating <span></span></button>
                 <button class="sort-btn" data-key="wins">Wins <span></span></button>
@@ -56,6 +53,7 @@
         </section>
 
         <section id="editor-section">
+            <h2 id="editor-title">Battle Editor (All Battles)</h2>
             <div id="editor-container"></div>
         </section>
     </main>
